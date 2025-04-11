@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from homework.models import load_model, save_model
 from homework.datasets.road_dataset import load_data
 from homework.metrics import PlannerMetric
-from homework import train_mlp,train_tp,train_planner
+from homework import train_mlp,train_tp,train_cnn
 """
 Usage:
     python3 -m homework.train_planner --your_args here
@@ -82,7 +82,7 @@ def train(
             device=device,
         )
     elif model_name == "cnn_planner":
-        train_planner.train_model(
+        train_cnn.train_model(
             model_name=model_name,
             train_loader=train_loader,
             val_loader=val_loader,
@@ -93,14 +93,14 @@ def train(
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
  
-    for lr in [1e-2, 1e-3, 1e-4]:
-        train(
-            model_name="mlp_planner",
-            transform_pipeline="state_only",
-            num_workers=4,
-            lr=lr,
-            batch_size=128,
-            num_epoch=40,
-        )
+#     for lr in [1e-2, 1e-3, 1e-4]:
+#         train(
+#             model_name="mlp_planner",
+#             transform_pipeline="state_only",
+#             num_workers=4,
+#             lr=lr,
+#             batch_size=128,
+#             num_epoch=40,
+#         )
