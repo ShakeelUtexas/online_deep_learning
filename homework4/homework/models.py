@@ -243,7 +243,7 @@ def load_model(
     """
 
     if model_name == "transformer_planner":
-        model = TransformerPlanner(
+        m = TransformerPlanner(
             n_track=n_track,
             n_waypoints=n_waypoints,
             d_model=128,
@@ -251,7 +251,7 @@ def load_model(
             num_layers=4
         ) 
     else:
-        model = MODEL_FACTORY[model_name](**model_kwargs)
+        m = MODEL_FACTORY[model_name](**model_kwargs)
 
         if with_weights:
             model_path = HOMEWORK_DIR / f"{model_name}.th"
@@ -270,7 +270,7 @@ def load_model(
         if model_size_mb > 20:
             raise AssertionError(f"{model_name} is too large: {model_size_mb:.2f} MB")
 
-    return model
+    return m
 
 
 def save_model(model: torch.nn.Module) -> str:
