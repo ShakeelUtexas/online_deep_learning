@@ -93,14 +93,28 @@ def train(
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-# if __name__ == "__main__":
+if __name__ == "__main__":
  
-#     for lr in [1e-2, 1e-3, 1e-4]:
-#         train(
-#             model_name="mlp_planner",
-#             transform_pipeline="state_only",
-#             num_workers=4,
-#             lr=lr,
-#             batch_size=128,
-#             num_epoch=40,
-#         )
+    for lr in [1e-2, 1e-3, 1e-4]:
+        train(
+            model_name="transformer_planner", # 
+            #transform_pipeline="state_only", for mlp
+            transform_pipeline="state_only", # for cnn
+            num_workers=4,
+            lr=lr,
+            batch_size=128,
+            num_epoch=40,
+         )
+
+
+# #working for cnn and mlp
+# # this is just how it's structured in the solution
+# for lr in [1e-3]:#, 1e-3, 1e-4]:
+#     train(
+#         model_name="cnn_planner",
+#         transform_pipeline="default",
+#         num_workers=4,
+#         lr=lr,
+#         batch_size=128,
+#         num_epoch=40,
+#     )

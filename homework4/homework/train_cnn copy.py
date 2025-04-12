@@ -12,8 +12,6 @@ def train_model(
     val_loader: DataLoader,
     n_epochs: int = 20,
     learning_rate: float = 1e-3,
-    n_track: int = 10,  # Number of track points
-    n_waypoints: int = 3,  # Number of waypoints
     device: str = None,
 ):
     """
@@ -25,8 +23,6 @@ def train_model(
         val_loader (DataLoader): DataLoader for validation data.
         n_epochs (int): Number of epochs to train.
         learning_rate (float): Learning rate for the optimizer.
-        n_track (int): Number of track points.
-        n_waypoints (int): Number of waypoints to predict.
         device (str): Device to use for training ("cuda", "mps", or "cpu").
     """
     # Automatically determine the best available device if not provided
@@ -40,8 +36,8 @@ def train_model(
 
     print(f"Using device: {device}")
 
-    # Load the model with the correct configuration
-    model = load_model(model_name, n_track=n_track, n_waypoints=n_waypoints).to(device)
+    # Load the model
+    model = load_model(model_name, with_weights=False).to(device)
 
     # Define loss function and optimizer
     criterion = nn.MSELoss()  # Mean Squared Error for waypoint prediction
@@ -52,21 +48,15 @@ def train_model(
         model.train()
         train_loss = 0.0
         for batch in train_loader:
-            #print(f"Targets shape: {batch['waypoints'].shape}")
             # Move data to device
-            track_left = batch["track_left"].to(device)
-            track_right = batch["track_right"].to(device)
-            targets = batch["waypoints"].to(device)
-
-            # Debug shapes
-            #print(f"Outputs shape: {model(track_left, track_right).shape}")
-            #print(f"Targets shape: {targets.shape}")
+            inputs = batch["image"].to(device)  # Replace "inputs" with the correct key
+            targets = batch["waypoints"].to(device)  # Replace "targets" with the correct key
 
             # Zero the parameter gradients
             optimizer.zero_grad()
 
             # Forward pass
-            outputs = model(track_left=track_left, track_right=track_right)
+            outputs = model(inputs)  # Pass inputs directly to the model
             loss = criterion(outputs, targets)
 
             # Backward pass and optimization
@@ -85,12 +75,11 @@ def train_model(
         with torch.no_grad():
             for batch in val_loader:
                 # Move data to device
-                track_left = batch["track_left"].to(device)
-                track_right = batch["track_right"].to(device)
-                targets = batch["waypoints"].to(device)
+                inputs = batch["image"].to(device)  # Replace "inputs" with the correct key
+                targets = batch["waypoints"].to(device)  # Replace "targets" with the correct key
 
                 # Forward pass
-                outputs = model(track_left=track_left, track_right=track_right)
+                outputs = model(inputs)  # Pass inputs directly to the model
                 loss = criterion(outputs, targets)
                 val_loss += loss.item()
 
@@ -115,5 +104,35 @@ def train_model(
         )
 
     # Save the trained model
-    save_path = save_model(model, filename=f"{model_name}_nwaypoints{n_waypoints}.pth")
+    save_path = save_model(model)
     print(f"Model saved to {save_path}")
+
+
+if __name__ == "__main__":
+    # Load training and validation datasets
+    train_loader = load_data(
+        dataset_path="drive_data/train",  # Path to the training data
+        transform_pipeline="default",
+        return_dataloader=True,
+        num_workers=4,
+        batch_size=32,
+        shuffle=True,
+    )
+
+    val_loader = load_data(
+        dataset_path="drive_data/val",  # Path to the validation data
+        transform_pipeline="default",
+        return_dataloader=True,
+        num_workers=4,
+        batch_size=32,
+        shuffle=False,
+    )
+
+    # Train the model
+    train_model(
+        model_name="mlp_planner",    # Change to "MLPPlanner" or "TransformerPlanner" as needed
+        train_loader=train_loader,
+        val_loader=val_loader,
+        n_epochs=20,
+        learning_rate=1e-3,
+    )
