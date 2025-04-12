@@ -115,5 +115,5 @@ def train_model(
         )
 
     # Save the trained model
-    save_path = save_model(model, filename=f"{model_name}_nwaypoints{n_waypoints}.pth")
+    save_path = save_model(model)
     print(f"Model saved to {save_path}")
