@@ -93,18 +93,18 @@ def train(
     else:
         raise ValueError(f"Unknown model name: {model_name}")
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
  
-    for lr in [1e-2, 1e-3, 1e-4]:
-        train(
-            model_name="transformer_planner", # 
-            #transform_pipeline="state_only", for mlp
-            transform_pipeline="state_only", # for cnn
-            num_workers=4,
-            lr=lr,
-            batch_size=512,
-            num_epoch=2,
-         )
+#     for lr in [1e-2, 1e-3, 1e-4]:
+#         train(
+#             model_name="transformer_planner", # 
+#             #transform_pipeline="state_only", for mlp
+#             transform_pipeline="state_only", # for cnn
+#             num_workers=4,
+#             lr=lr,
+#             batch_size=512,
+#             num_epoch=2,
+#          )
 
 
 # #working for cnn and mlp
