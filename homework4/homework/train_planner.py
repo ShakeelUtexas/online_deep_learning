@@ -102,8 +102,8 @@ if __name__ == "__main__":
             transform_pipeline="state_only", # for cnn
             num_workers=4,
             lr=lr,
-            batch_size=128,
-            num_epoch=40,
+            batch_size=512,
+            num_epoch=2,
          )
 
 

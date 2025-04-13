@@ -66,9 +66,9 @@ class TransformerPlanner(nn.Module):
         self,
         n_track: int = 10,
         n_waypoints: int = 3,
-        d_model: int = 256,  # Increased from 128
+        d_model: int = 512,  # Increased model dimension
         nhead: int = 8,
-        num_layers: int = 6,  # Increased from 4
+        num_layers: int = 8,  # Increased number of layers
         dropout: float = 0.1,
     ):
         super().__init__()
@@ -76,86 +76,125 @@ class TransformerPlanner(nn.Module):
         self.n_waypoints = n_waypoints
         self.d_model = d_model
 
-        # Enhanced input embedding with layer normalization
+        # Enhanced track point embeddings with position-aware features
         self.input_embedding = nn.Sequential(
-            nn.Linear(2, d_model),
-            nn.LayerNorm(d_model),
+            nn.Linear(2, d_model // 2),
+            nn.LayerNorm(d_model // 2),
             nn.ReLU(),
+            nn.Linear(d_model // 2, d_model),
+            nn.LayerNorm(d_model),
             nn.Dropout(dropout)
         )
+
+        # Learnable query embeddings for waypoints
+        self.query_embed = nn.Parameter(torch.zeros(n_waypoints, d_model))
         
-        # Learnable query embeddings
-        self.query_embed = nn.Parameter(torch.randn(n_waypoints, d_model))
-        
-        # Enhanced decoder with more layers and better initialization
+        # Enhanced decoder with larger FFN
         decoder_layer = nn.TransformerDecoderLayer(
             d_model=d_model,
             nhead=nhead,
-            dim_feedforward=4*d_model,  # Increased feedforward dimension
+            dim_feedforward=4 * d_model,  # Increased FFN capacity
             dropout=dropout,
-            activation='gelu'  # Changed to GELU activation
+            activation='gelu',
+            batch_first=True
         )
+        
         self.transformer_decoder = nn.TransformerDecoder(
             decoder_layer,
             num_layers=num_layers,
             norm=nn.LayerNorm(d_model)
         )
-        
-        # Enhanced output layers with skip connection
-        self.output_layer = nn.Sequential(
-            nn.Linear(d_model, d_model//2),
-            nn.LayerNorm(d_model//2),
-            nn.GELU(),
-            nn.Dropout(dropout),
-            nn.Linear(d_model//2, 2)
-        )
-        
+
+        # Progressive refinement network for waypoint prediction
+        self.refine_network = nn.ModuleList([
+            nn.Sequential(
+                nn.Linear(d_model, d_model // 2),
+                nn.LayerNorm(d_model // 2),
+                nn.GELU(),
+                nn.Dropout(dropout),
+                nn.Linear(d_model // 2, d_model // 4),
+                nn.LayerNorm(d_model // 4),
+                nn.GELU(),
+                nn.Linear(d_model // 4, 2)
+            ) for _ in range(num_layers)
+        ])
+
         self._init_weights()
 
     def _init_weights(self):
-        """Initialize weights with better scaling"""
-        for p in self.parameters():
-            if p.dim() > 1:
-                nn.init.xavier_uniform_(p)
-        
-        # Special initialization for query embeddings
+        """Enhanced initialization for better training dynamics"""
+        def _init_layer(m):
+            if isinstance(m, nn.Linear):
+                nn.init.xavier_uniform_(m.weight)
+                if m.bias is not None:
+                    nn.init.zeros_(m.bias)
+            elif isinstance(m, nn.LayerNorm):
+                nn.init.ones_(m.weight)
+                nn.init.zeros_(m.bias)
+
+        self.apply(_init_layer)
         nn.init.normal_(self.query_embed, mean=0.0, std=0.02)
+
 
     def forward(self, track_left: torch.Tensor, track_right: torch.Tensor) -> torch.Tensor:
         batch_size = track_left.size(0)
         
-        # Concatenate and normalize track points
+        # Normalize and concatenate track points
         track_points = torch.cat([track_left, track_right], dim=1)
-        track_points = (track_points - track_points.mean(dim=1, keepdim=True)) / (track_points.std(dim=1, keepdim=True) + 1e-5)
+        track_mean = track_points.mean(dim=1, keepdim=True)
+        track_std = track_points.std(dim=1, keepdim=True) + 1e-5
+        track_points = (track_points - track_mean) / track_std
         
-        # Enhanced track embeddings
+        # Generate track embeddings with positional information
         track_embeddings = self.input_embedding(track_points)
-        
-        # Add positional encoding
         track_embeddings = self._add_positional_encoding(track_embeddings)
         
-        # Prepare queries and memory
-        queries = self.query_embed.unsqueeze(1).expand(-1, batch_size, -1)
-        memory = track_embeddings.transpose(0, 1)
+        # Prepare decoder inputs
+        queries = self.query_embed.unsqueeze(0).expand(batch_size, -1, -1)
         
-        # Transformer decoder with attention mask
-        tgt_mask = self._generate_square_subsequent_mask(self.n_waypoints).to(track_left.device)
-        waypoint_features = self.transformer_decoder(
-            tgt=queries,
-            memory=memory,
-            tgt_mask=tgt_mask
-        )
+        # Progressive refinement through decoder layers
+        waypoints = None
+        decoder_output = queries
         
-        # Generate waypoints
-        waypoints = self.output_layer(waypoint_features.transpose(0, 1))
+        for layer_idx in range(len(self.refine_network)):
+            # Update decoder output
+            decoder_output = self.transformer_decoder.layers[layer_idx](
+                decoder_output,
+                track_embeddings,
+                tgt_mask=self._generate_causal_mask(self.n_waypoints).to(track_points.device)
+            )
+            
+            # Predict waypoints at current refinement level
+            current_waypoints = self.refine_network[layer_idx](decoder_output)
+            
+            # Update waypoints prediction
+            if waypoints is None:
+                waypoints = current_waypoints
+            else:
+                waypoints = waypoints + current_waypoints * 0.1  # Progressive refinement
+        
+        # Denormalize predictions
+        waypoints = waypoints * track_std + track_mean
         
         return waypoints
 
-    def _generate_square_subsequent_mask(self, sz: int) -> torch.Tensor:
-        """Generate attention mask for autoregressive prediction"""
-        mask = (torch.triu(torch.ones(sz, sz)) == 1).transpose(0, 1)
-        mask = mask.float().masked_fill(mask == 0, float('-inf')).masked_fill(mask == 1, float(0.0))
-        return mask 
+    def _generate_causal_mask(self, size: int) -> torch.Tensor:
+        """Generate causal attention mask for autoregressive prediction"""
+        mask = torch.triu(torch.ones(size, size), diagonal=1)
+        return mask.masked_fill(mask == 1, float('-inf'))
+
+    def _add_positional_encoding(self, x: torch.Tensor) -> torch.Tensor:
+        """Add sinusoidal positional encoding with learnable scaling"""
+        seq_len = x.size(1)
+        position = torch.arange(seq_len, device=x.device).unsqueeze(1)
+        div_term = torch.exp(torch.arange(0, self.d_model, 2, device=x.device) * 
+                           -(math.log(10000.0) / self.d_model))
+        
+        pe = torch.zeros(1, seq_len, self.d_model, device=x.device)
+        pe[0, :, 0::2] = torch.sin(position * div_term)
+        pe[0, :, 1::2] = torch.cos(position * div_term)
+        
+        return x + pe
 
 # class TransformerPlanner(nn.Module):
 #     def __init__(
