@@ -270,6 +270,8 @@ def load_model(
 
         if with_weights:
             model_path = HOMEWORK_DIR / f"{model_name}.th"
+            print(f"HOMEWORK_DIR {HOMEWORK_DIR}")
+            print(f"Loading model weights from {model_path}")
             assert model_path.exists(), f"{model_path.name} not found"
 
             try:
