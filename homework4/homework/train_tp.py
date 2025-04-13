@@ -45,7 +45,24 @@ def train_model(
 
     # Define loss function and optimizer
     criterion = nn.MSELoss()  # Mean Squared Error for waypoint prediction
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    #optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = optim.AdamW(
+        model.parameters(),
+        lr=learning_rate,
+        weight_decay=0.01,
+        betas=(0.9, 0.999)
+    )
+    
+    scheduler = optim.lr_scheduler.OneCycleLR(
+        optimizer,
+        max_lr=learning_rate,
+        epochs=n_epochs,
+        steps_per_epoch=len(train_loader),
+        pct_start=0.1,
+        div_factor=25,
+        final_div_factor=1000,
+        anneal_strategy='cos'
+    )
 
     for epoch in range(n_epochs):
         # Training phase
