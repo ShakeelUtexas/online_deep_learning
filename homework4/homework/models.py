@@ -264,7 +264,25 @@ def load_model(
             d_model=128,
             nhead=8,
             num_layers=4
-        ) 
+        )
+        if with_weights:
+            model_path = HOMEWORK_DIR / f"{model_name}.th"
+            print(f"HOMEWORK_DIR {HOMEWORK_DIR}")
+            print(f"Loading model weights from {model_path}")
+            assert model_path.exists(), f"{model_path.name} not found"
+
+            try:
+                m.load_state_dict(torch.load(model_path, map_location="cpu"))
+            except RuntimeError as e:
+                raise AssertionError(
+                    f"Failed to load {model_path.name}, make sure the default model arguments are set correctly"
+                ) from e
+
+        # limit model sizes since they will be zipped and submitted
+        model_size_mb = calculate_model_size_mb(m)
+
+        if model_size_mb > 20:
+            raise AssertionError(f"{model_name} is too large: {model_size_mb:.2f} MB")
     else:
         m = MODEL_FACTORY[model_name](**model_kwargs)
 
